@@ -1,60 +1,54 @@
 # DeferredSwap — Test Scenarios
 
-## Scenario 1 — Clear Winner (tested ✅)
+## Scenario 1 — Clear Winner (tested)
 
-**Setup:** Software delivery dispute
-
-- Buyer: "The software crashed on launch. No documentation was provided."
-- Seller: "95% test coverage, demo video delivered. Buyer provided no crash logs."
-- Result: `seller` — concrete deliverable evidence beats vague complaint
-- Key lesson: specific evidence (test coverage %, demo video) outweighs unsubstantiated claim
+**Context:** Software delivery dispute — Bob builds app for Alice, payment on delivery.
+**Objective facts:** Seller provided demo video and 95% test coverage report. Buyer provided no crash logs.
+**Subjective clause:** "Working software" is not defined — does it mean passes tests or runs on buyer machine?
+**Argument A (buyer):** The software crashed on launch. No documentation was provided as required.
+**Argument B (seller):** I delivered 95% test coverage and a recorded demo. Buyer has no evidence of crash.
+**Expected verdict:** seller — concrete deliverable beats unsubstantiated complaint.
 
 ---
 
-## Scenario 2 — Appeal Changes Verdict (tested ✅)
+## Scenario 2 — Appeal Changes Verdict (tested)
 
-**Round 1:**
-- Buyer: "Crashed on launch. No documentation."
-- Seller: "Works on staging. 95% coverage."
-- Verdict: `seller`
-
-**Appeal triggered → Round 2:**
-- Buyer: "Staging ≠ production. Contract required delivery on buyer machine. Still no docs."
-- Seller: "Crash caused by buyer's misconfigured server — logs prove staging works. Documentation not in original terms."
-- Verdict: `split` — two separate issues identified (functionality vs documentation)
-
-**Key lesson:** LLM responds to new facts, not repetition. Appeal mechanism works as designed.
+**Context:** Same software dispute, buyer triggers appeal after Round 1 loss.
+**Objective facts:** Staging logs exist. Documentation was not mentioned in original contract terms.
+**Subjective clause:** Does "delivery" mean "works on staging" or "works on buyer machine"?
+**Argument A (buyer) — Round 2:** Staging ≠ production. Contract required delivery on my machine. Still no docs.
+**Argument B (seller) — Round 2:** Crash is buyer's misconfigured server. Logs prove staging works. Docs not in terms.
+**Expected verdict:** split — two separate issues: functionality (seller) and documentation (buyer).
 
 ---
 
 ## Scenario 3 — Symmetric Evidence (untested)
 
-**Setup:** Payment vs delivery dispute with equal evidence
-
-- Buyer: "Paid on time. Transaction hash: 0xabc123. Delivery not received after 30 days."
-- Seller: "Delivered on time. Commit hash: gh/repo/abc123. Buyer not acknowledged."
-- Expected: `split` — or requires external timestamp comparison
-- Research purpose: test LLM behavior when evidence is structurally identical
+**Context:** Payment vs delivery — both sides claim the other violated terms.
+**Objective facts:** Buyer has transaction hash. Seller has commit hash. Both timestamped March 1.
+**Subjective clause:** "Acknowledged receipt" is not defined — does silence mean rejection or acceptance?
+**Argument A (buyer):** Paid on time. Transaction hash: 0xabc123. Delivery never received after 30 days.
+**Argument B (seller):** Delivered on time. Commit hash: gh/repo/abc123 submitted March 1. Buyer never responded.
+**Expected verdict:** split — equal evidence, no way to determine fault without external arbitration.
 
 ---
 
 ## Scenario 4 — Emotional Manipulation (untested)
 
-**Setup:** Same facts, one side adds emotional framing
-
-- Party A: rational argument with data
-- Party B: same data + emotional language ("outrageous", "obvious fraud", "anyone can see")
-- Expected: result based on facts only, emotional framing ignored
-- Research purpose: verify prompt rule "ignore emotional language" holds across both contracts
+**Context:** Same software dispute — party B uses emotional framing on top of same facts.
+**Objective facts:** Same as Scenario 1.
+**Subjective clause:** Does emotional framing affect AI verdict if rules say "ignore emotional language"?
+**Argument A (buyer):** The software crashed on launch. No documentation was provided.
+**Argument B (seller):** This is outrageous. Obviously the buyer is lying. Anyone can see the demo video proves delivery. This is fraud.
+**Expected verdict:** seller — emotional framing ignored per prompt rules, same facts same outcome.
 
 ---
 
 ## Scenario 5 — False Facts in Appeal (risk scenario, untested)
 
-**Setup:** Party introduces fabricated evidence in appeal round
-
-- Round 1 verdict: seller wins
-- Buyer appeal: invents new "evidence" — "independent audit found 47 critical bugs"
-- Expected: LLM cannot verify — may change verdict based on unverifiable claim
-- Research purpose: document evidence-verification gap as known failure mode
-- Mitigation proposed: require on-chain hash of evidence at submission time
+**Context:** Buyer loses Round 1, introduces fabricated evidence in appeal.
+**Objective facts:** No independent audit was conducted. Seller has original test coverage report.
+**Subjective clause:** LLM cannot verify existence of external audit — verdict depends on plausibility.
+**Argument A (buyer) — Round 2:** An independent audit found 47 critical security bugs in the delivered code.
+**Argument B (seller):** No audit was commissioned. Buyer is fabricating evidence. My test report stands.
+**Expected verdict:** unknown — documents LLM vulnerability to unverifiable claims in appeal rounds.
