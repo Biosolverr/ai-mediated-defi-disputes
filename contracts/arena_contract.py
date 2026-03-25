@@ -1,4 +1,4 @@
-# v0.4.0 - Enhanced for Deferred Swap Scenarios
+# v0.5.0 - Enhanced with Detailed Analysis
 # { "Depends": "py-genlayer:latest" }
 
 from genlayer import *
@@ -130,18 +130,18 @@ ARBITRATION RULES:
 Decide the outcome based on how well each party's argument aligns with the objective facts and addresses the subjective clause.
 
 Return JSON:
-{
+{{
   "winner": "player_a" | "player_b" | "draw",
   "reason": "step-by-step reasoning",
-  "analysis": {
+  "analysis": {{
     "argument_a_strengths": "...",
     "argument_a_weaknesses": "...",
     "argument_b_strengths": "...",
     "argument_b_weaknesses": "...",
     "key_facts_used": "...",
     "why_winner": "..."
-  }
-}
+  }}
+}}"""
 
         def leader():
             return gl.nondet.exec_prompt(prompt, response_format="json")
@@ -153,18 +153,37 @@ Return JSON:
             if not isinstance(data, dict):
                 return False
             
-            decision = data.get("decision")
-            reasoning = data.get("reasoning", "")
+            winner = data.get("winner")
+            reason = data.get("reason", "")
+            analysis = data.get("analysis", {})
             
-            return decision in ("party_a", "party_b", "split") and len(reasoning) > 30
+            return (winner in ("player_a", "player_b", "draw") and 
+                    len(reason) > 10 and 
+                    isinstance(analysis, dict))
 
         result = gl.vm.run_nondet_unsafe(leader, validator)
         
-        self.verdict = result.get("decision", "split")
-        self.reasoning = result.get("reasoning", "No valid reasoning provided")
+        self.verdict = result.get("winner", "draw")
+        self.reasoning = result.get("reason", "No valid reasoning provided")
+        
+        # Store detailed analysis
+        analysis = result.get("analysis", {})
+        detailed_analysis = f"""
+VERDICT: {self.verdict}
+REASONING: {self.reasoning}
+
+DETAILED ANALYSIS:
+- Party A Strengths: {analysis.get('argument_a_strengths', 'N/A')}
+- Party A Weaknesses: {analysis.get('argument_a_weaknesses', 'N/A')}
+- Party B Strengths: {analysis.get('argument_b_strengths', 'N/A')}
+- Party B Weaknesses: {analysis.get('argument_b_weaknesses', 'N/A')}
+- Key Facts Used: {analysis.get('key_facts_used', 'N/A')}
+- Why Winner: {analysis.get('why_winner', 'N/A')}
+"""
+        
         self.status = "resolved"
         
-        return f"{self.verdict}: {self.reasoning}"
+        return detailed_analysis
 
     @gl.public.write
     def appeal(self, appeal_argument: str) -> None:
@@ -241,10 +260,17 @@ APPEAL REVIEW RULES:
 4. Appeals should only succeed if they provide compelling new evidence or expose clear errors
 5. Burden of proof is on the appealing party to show the original decision was wrong
 
-Return JSON format:
+Return JSON:
 {{
-  "decision": "party_a" | "party_b" | "split",
-  "reasoning": "explanation of appeal decision and how it relates to new evidence"
+  "winner": "player_a" | "player_b" | "draw",
+  "reason": "step-by-step appeal reasoning",
+  "analysis": {{
+    "original_decision_validity": "...",
+    "appeal_evidence_strength": "...",
+    "new_facts_impact": "...",
+    "decision_change_justification": "...",
+    "final_verdict_basis": "..."
+  }}
 }}"""
 
         def leader():
@@ -257,16 +283,34 @@ Return JSON format:
             if not isinstance(data, dict):
                 return False
             
-            decision = data.get("decision")
-            reasoning = data.get("reasoning", "")
+            winner = data.get("winner")
+            reason = data.get("reason", "")
+            analysis = data.get("analysis", {})
             
-            return decision in ("party_a", "party_b", "split") and len(reasoning) > 30
+            return (winner in ("player_a", "player_b", "draw") and 
+                    len(reason) > 10 and 
+                    isinstance(analysis, dict))
 
         result = gl.vm.run_nondet_unsafe(leader, validator)
         
         # Update verdict and reasoning with appeal decision
-        self.verdict = result.get("decision", self.verdict)
-        self.reasoning = f"Appeal Round {self.appeal_round}: {result.get('reasoning', 'No valid reasoning')}"
+        self.verdict = result.get("winner", self.verdict)
+        appeal_reasoning = result.get("reason", "No valid reasoning")
+        
+        analysis = result.get("analysis", {})
+        detailed_appeal = f"""
+APPEAL ROUND {self.appeal_round} VERDICT: {self.verdict}
+APPEAL REASONING: {appeal_reasoning}
+
+APPEAL ANALYSIS:
+- Original Decision Validity: {analysis.get('original_decision_validity', 'N/A')}
+- Appeal Evidence Strength: {analysis.get('appeal_evidence_strength', 'N/A')}  
+- New Facts Impact: {analysis.get('new_facts_impact', 'N/A')}
+- Decision Change Justification: {analysis.get('decision_change_justification', 'N/A')}
+- Final Verdict Basis: {analysis.get('final_verdict_basis', 'N/A')}
+"""
+        
+        self.reasoning = detailed_appeal
         
         # Reset appeal state
         self.appeal_active = False
@@ -274,7 +318,7 @@ Return JSON format:
         self.appeal_counter_argument = ""
         self.status = "resolved"
         
-        return f"Appeal Round {self.appeal_round} - {self.verdict}: {self.reasoning}"
+        return detailed_appeal
 
     # Read-only methods for state inspection
     @gl.public.view
@@ -284,6 +328,10 @@ Return JSON format:
     @gl.public.view
     def get_verdict(self) -> str:
         return self.verdict
+
+    @gl.public.view
+    def get_reasoning(self) -> str:
+        return self.reasoning
 
     @gl.public.view
     def get_arguments(self) -> dict:
