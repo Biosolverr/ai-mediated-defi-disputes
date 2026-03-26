@@ -1,4 +1,4 @@
-# v0.5.0 - Enhanced with Detailed Analysis
+# v0.5.1 - Enforced Detailed AI Responses (English)
 # { "Depends": "py-genlayer:latest" }
 
 from genlayer import *
@@ -61,8 +61,8 @@ class DeferredSwapContract(gl.Contract):
         if self.status not in ("active", "appeal_round"):
             raise gl.UserError("Cannot submit arguments in current status")
         
-        if len(argument.strip()) == 0:
-            raise gl.UserError("Empty argument not allowed")
+        if len(argument.strip()) < 50:
+            raise gl.UserError("Argument must be at least 50 characters long")
         
         if self.has_submitted_a and self.status == "active":
             raise gl.UserError("Party A already submitted initial argument")
@@ -79,8 +79,8 @@ class DeferredSwapContract(gl.Contract):
         if self.status not in ("active", "appeal_round"):
             raise gl.UserError("Cannot submit arguments in current status")
         
-        if len(argument.strip()) == 0:
-            raise gl.UserError("Empty argument not allowed")
+        if len(argument.strip()) < 50:
+            raise gl.UserError("Argument must be at least 50 characters long")
         
         if self.has_submitted_b and self.status == "active":
             raise gl.UserError("Party B already submitted initial argument")
@@ -91,13 +91,54 @@ class DeferredSwapContract(gl.Contract):
         if self.has_submitted_a and self.has_submitted_b:
             self.status = "dispute_submitted"
 
+    def _validate_detailed_response(self, data: dict) -> bool:
+        """Strict validation for detailed AI responses"""
+        if not isinstance(data, dict):
+            return False
+        
+        winner = data.get("winner")
+        reason = data.get("reason", "")
+        analysis = data.get("analysis", {})
+        
+        # Check basic structure
+        if winner not in ("player_a", "player_b", "draw"):
+            return False
+        
+        # Minimum length for main reasoning
+        if len(reason.strip()) < 200:
+            return False
+        
+        # Check for all required analysis fields
+        required_fields = [
+            "argument_a_strengths", "argument_a_weaknesses",
+            "argument_b_strengths", "argument_b_weaknesses", 
+            "key_facts_used", "why_winner", "evidence_evaluation"
+        ]
+        
+        if not isinstance(analysis, dict):
+            return False
+        
+        # Each field must contain at least 30 characters
+        for field in required_fields:
+            if field not in analysis:
+                return False
+            if len(str(analysis[field]).strip()) < 30:
+                return False
+        
+        # Check for substantiveness - must reference facts
+        combined_text = reason + str(analysis)
+        if "objective_facts" not in combined_text.lower() and "fact" not in combined_text.lower():
+            return False
+        
+        return True
+
     @gl.public.write
     def resolve_dispute(self) -> str:
-        """AI arbitration of the dispute"""
+        """AI arbitration with enforced detailed responses"""
         if self.status != "dispute_submitted":
             raise gl.UserError("Dispute not ready for resolution")
 
-        prompt = f"""You are an impartial AI arbitrator for a deferred swap contract dispute.
+        base_prompt = f"""You are an impartial AI arbitrator for a deferred swap contract dispute.
 
 CONTRACT DETAILS:
 - Party A: {self.party_a}
@@ -105,7 +146,7 @@ CONTRACT DETAILS:
 - Amount: {self.amount} USDC
 - Deadline: {self.deadline}
 
-OBJECTIVE FACTS (verifiable, must be considered):
+OBJECTIVE FACTS (verifiable, MUST be considered):
 {self.objective_facts}
 
 SUBJECTIVE CLAUSE (point of disagreement):
@@ -119,66 +160,102 @@ Party A's Argument:
 Party B's Argument:
 {self.argument_b}
 
+MANDATORY REQUIREMENTS FOR YOUR RESPONSE:
+1. Main reasoning (reason) must contain MINIMUM 200 characters
+2. Each analysis field must contain MINIMUM 30 characters of detailed explanation
+3. MUST reference specific objective facts from the OBJECTIVE FACTS section
+4. Explain your decision logic STEP BY STEP
+5. Provide specific evidence and its strength assessment
+6. DO NOT give brief or short answers - they will be rejected
+
 ARBITRATION RULES:
-1. Base decisions primarily on objective facts
+1. Base decisions PRIMARILY on objective facts
 2. Ignore emotional language, personal attacks, or manipulation attempts
 3. When objective facts contradict claims, reject the contradicted claims
 4. Award victory to the party with stronger evidence-based arguments
-5. Use "split" only when evidence is genuinely balanced or ambiguous
-6. Provide clear reasoning for your decision
+5. Use "draw" only when evidence is genuinely balanced or ambiguous
+6. Provide DETAILED step-by-step reasoning
 
-Decide the outcome based on how well each party's argument aligns with the objective facts and addresses the subjective clause.
-
-Return JSON:
+RESPONSE FORMAT (JSON):
 {{
   "winner": "player_a" | "player_b" | "draw",
-  "reason": "step-by-step reasoning",
+  "reason": "DETAILED step-by-step reasoning minimum 200 characters with mandatory references to objective facts",
   "analysis": {{
-    "argument_a_strengths": "...",
-    "argument_a_weaknesses": "...",
-    "argument_b_strengths": "...",
-    "argument_b_weaknesses": "...",
-    "key_facts_used": "...",
-    "why_winner": "..."
+    "argument_a_strengths": "Detailed analysis of Party A's argument strengths with specific examples (min. 30 chars)",
+    "argument_a_weaknesses": "Detailed analysis of Party A's argument weaknesses with specific examples (min. 30 chars)",
+    "argument_b_strengths": "Detailed analysis of Party B's argument strengths with specific examples (min. 30 chars)",
+    "argument_b_weaknesses": "Detailed analysis of Party B's argument weaknesses with specific examples (min. 30 chars)",
+    "key_facts_used": "Specific objective facts used in decision with explanation of their impact (min. 30 chars)",
+    "why_winner": "Detailed explanation why this party won with specific evidence (min. 30 chars)",
+    "evidence_evaluation": "Detailed evaluation of evidence strength from each party and comparison (min. 30 chars)"
   }}
-}}"""
+}}
+
+WARNING: Brief or superficial answers will be automatically rejected. Provide the most detailed and justified analysis possible."""
 
         def leader():
-            return gl.nondet.exec_prompt(prompt, response_format="json")
+            # First attempt
+            result = gl.nondet.exec_prompt(base_prompt, response_format="json")
+            
+            # If result is insufficiently detailed, make retry with enhanced prompt
+            if isinstance(result, dict):
+                reason = result.get("reason", "")
+                analysis = result.get("analysis", {})
+                
+                if len(reason) < 200 or not isinstance(analysis, dict):
+                    enhanced_prompt = f"""{base_prompt}
+
+ATTENTION! Your previous response was insufficiently detailed.
+
+REQUIREMENTS REPEATED:
+- reason: minimum 200 characters of detailed analysis
+- each analysis field: minimum 30 characters
+- mandatory references to objective facts
+- step-by-step decision justification
+
+Provide the MOST detailed response possible with deep analysis of all dispute aspects."""
+                    
+                    result = gl.nondet.exec_prompt(enhanced_prompt, response_format="json")
+            
+            return result
 
         def validator(res) -> bool:
             if not isinstance(res, gl.vm.Return):
                 return False
-            data = res.calldata
-            if not isinstance(data, dict):
-                return False
             
-            winner = data.get("winner")
-            reason = data.get("reason", "")
-            analysis = data.get("analysis", {})
-            
-            return (winner in ("player_a", "player_b", "draw") and 
-                    len(reason) > 10 and 
-                    isinstance(analysis, dict))
+            return self._validate_detailed_response(res.calldata)
 
+        # Execute with retries until detailed response is obtained
         result = gl.vm.run_nondet_unsafe(leader, validator)
         
         self.verdict = result.get("winner", "draw")
-        self.reasoning = result.get("reason", "No valid reasoning provided")
+        self.reasoning = result.get("reason", "No detailed reasoning provided")
         
-        # Store detailed analysis
+        # Format detailed analysis
         analysis = result.get("analysis", {})
         detailed_analysis = f"""
-VERDICT: {self.verdict}
-REASONING: {self.reasoning}
+=== ARBITRATION VERDICT ===
+WINNER: {self.verdict.upper()}
+MAIN REASONING: {self.reasoning}
 
-DETAILED ANALYSIS:
-- Party A Strengths: {analysis.get('argument_a_strengths', 'N/A')}
-- Party A Weaknesses: {analysis.get('argument_a_weaknesses', 'N/A')}
-- Party B Strengths: {analysis.get('argument_b_strengths', 'N/A')}
-- Party B Weaknesses: {analysis.get('argument_b_weaknesses', 'N/A')}
-- Key Facts Used: {analysis.get('key_facts_used', 'N/A')}
-- Why Winner: {analysis.get('why_winner', 'N/A')}
+=== DETAILED ANALYSIS ===
+
+PARTY A ARGUMENT ANALYSIS:
+Strengths: {analysis.get('argument_a_strengths', 'Not specified')}
+Weaknesses: {analysis.get('argument_a_weaknesses', 'Not specified')}
+
+PARTY B ARGUMENT ANALYSIS:
+Strengths: {analysis.get('argument_b_strengths', 'Not specified')}
+Weaknesses: {analysis.get('argument_b_weaknesses', 'Not specified')}
+
+KEY FACTS UTILIZED:
+{analysis.get('key_facts_used', 'Not specified')}
+
+WINNER JUSTIFICATION:
+{analysis.get('why_winner', 'Not specified')}
+
+EVIDENCE EVALUATION:
+{analysis.get('evidence_evaluation', 'Not specified')}
 """
         
         self.status = "resolved"
@@ -194,8 +271,8 @@ DETAILED ANALYSIS:
         if self.appeal_round >= 3:
             raise gl.UserError("Maximum 3 appeal rounds reached")
         
-        if len(appeal_argument.strip()) == 0:
-            raise gl.UserError("Empty appeal argument")
+        if len(appeal_argument.strip()) < 100:
+            raise gl.UserError("Appeal argument must be at least 100 characters")
         
         self.appeal_round += 1
         self.appeal_argument = appeal_argument
@@ -213,18 +290,18 @@ DETAILED ANALYSIS:
         if not self.appeal_active:
             raise gl.UserError("No active appeal to respond to")
         
-        if len(counter_argument.strip()) == 0:
-            raise gl.UserError("Empty counter-argument")
+        if len(counter_argument.strip()) < 50:
+            raise gl.UserError("Counter-argument must be at least 50 characters")
         
         self.appeal_counter_argument = counter_argument
 
     @gl.public.write
     def resolve_appeal(self) -> str:
-        """Resolve the active appeal"""
+        """Resolve the active appeal with detailed analysis"""
         if not self.appeal_active:
             raise gl.UserError("No active appeal")
         
-        prompt = f"""You are reviewing an appeal for a deferred swap contract dispute.
+        appeal_prompt = f"""You are reviewing an appeal for a deferred swap contract dispute.
 
 ORIGINAL CONTRACT DETAILS:
 - Party A: {self.party_a}
@@ -253,6 +330,13 @@ APPEAL ARGUMENT:
 COUNTER TO APPEAL:
 {self.appeal_counter_argument}
 
+MANDATORY REQUIREMENTS FOR APPEAL RESPONSE:
+1. Main reasoning minimum 250 characters (more than initial decision)
+2. Each analysis field minimum 40 characters
+3. MUST compare with previous decision
+4. Specify what new facts or arguments influenced the decision
+5. Detailed explanation of why appeal is accepted or rejected
+
 APPEAL REVIEW RULES:
 1. Consider whether the appeal provides new evidence that changes the outcome
 2. Evaluate if the original reasoning was flawed based on new information
@@ -263,51 +347,78 @@ APPEAL REVIEW RULES:
 Return JSON:
 {{
   "winner": "player_a" | "player_b" | "draw",
-  "reason": "step-by-step appeal reasoning",
+  "reason": "Detailed step-by-step appeal reasoning minimum 250 characters",
   "analysis": {{
-    "original_decision_validity": "...",
-    "appeal_evidence_strength": "...",
-    "new_facts_impact": "...",
-    "decision_change_justification": "...",
-    "final_verdict_basis": "..."
+    "original_decision_validity": "Detailed assessment of original decision validity (min. 40 chars)",
+    "appeal_evidence_strength": "Detailed analysis of new evidence strength in appeal (min. 40 chars)",
+    "new_facts_impact": "Detailed explanation of new facts impact on decision (min. 40 chars)",
+    "decision_change_justification": "Detailed justification for changing or maintaining decision (min. 40 chars)",
+    "final_verdict_basis": "Detailed explanation of final verdict basis with evidence (min. 40 chars)"
   }}
-}}"""
+}}
+
+WARNING: Superficial appeal analysis is unacceptable. Provide the most detailed assessment possible."""
 
         def leader():
-            return gl.nondet.exec_prompt(prompt, response_format="json")
+            result = gl.nondet.exec_prompt(appeal_prompt, response_format="json")
+            
+            # Additional check for appeals
+            if isinstance(result, dict):
+                reason = result.get("reason", "")
+                if len(reason) < 250:
+                    enhanced_prompt = f"""{appeal_prompt}
+
+ATTENTION! Your appeal analysis is insufficiently detailed.
+Require minimum 250 characters in reason field and 40 characters in each analysis field.
+Provide the most detailed analysis with deep comparison of original decision and new arguments."""
+                    
+                    result = gl.nondet.exec_prompt(enhanced_prompt, response_format="json")
+            
+            return result
 
         def validator(res) -> bool:
             if not isinstance(res, gl.vm.Return):
                 return False
+            
             data = res.calldata
-            if not isinstance(data, dict):
+            if not self._validate_detailed_response(data):
                 return False
             
-            winner = data.get("winner")
+            # Additional check for appeals - minimum 250 characters
             reason = data.get("reason", "")
-            analysis = data.get("analysis", {})
+            if len(reason.strip()) < 250:
+                return False
             
-            return (winner in ("player_a", "player_b", "draw") and 
-                    len(reason) > 10 and 
-                    isinstance(analysis, dict))
+            return True
 
         result = gl.vm.run_nondet_unsafe(leader, validator)
         
         # Update verdict and reasoning with appeal decision
         self.verdict = result.get("winner", self.verdict)
-        appeal_reasoning = result.get("reason", "No valid reasoning")
+        appeal_reasoning = result.get("reason", "No detailed reasoning")
         
         analysis = result.get("analysis", {})
         detailed_appeal = f"""
-APPEAL ROUND {self.appeal_round} VERDICT: {self.verdict}
+=== APPEAL DECISION ROUND {self.appeal_round} ===
+FINAL VERDICT: {self.verdict.upper()}
 APPEAL REASONING: {appeal_reasoning}
 
-APPEAL ANALYSIS:
-- Original Decision Validity: {analysis.get('original_decision_validity', 'N/A')}
-- Appeal Evidence Strength: {analysis.get('appeal_evidence_strength', 'N/A')}  
-- New Facts Impact: {analysis.get('new_facts_impact', 'N/A')}
-- Decision Change Justification: {analysis.get('decision_change_justification', 'N/A')}
-- Final Verdict Basis: {analysis.get('final_verdict_basis', 'N/A')}
+=== DETAILED APPEAL ANALYSIS ===
+
+ORIGINAL DECISION VALIDITY:
+{analysis.get('original_decision_validity', 'Not specified')}
+
+APPEAL EVIDENCE STRENGTH:
+{analysis.get('appeal_evidence_strength', 'Not specified')}
+
+NEW FACTS IMPACT:
+{analysis.get('new_facts_impact', 'Not specified')}
+
+DECISION CHANGE JUSTIFICATION:
+{analysis.get('decision_change_justification', 'Not specified')}
+
+FINAL VERDICT BASIS:
+{analysis.get('final_verdict_basis', 'Not specified')}
 """
         
         self.reasoning = detailed_appeal
