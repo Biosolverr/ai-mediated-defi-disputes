@@ -1,7 +1,7 @@
 # reports/ai-arbitrator-consolidated-submission.md
 
 # AI Arbitrator: Consolidated Behavioral & Failure Report
-**Version:** v3.1  
+**Version:** v03.1  
 **Purpose:** submission-oriented status report (describes behavior and failure points, not a remediation roadmap)  
 **Period:** March 2026
 
